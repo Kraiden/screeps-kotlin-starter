@@ -21,6 +21,7 @@ val screepsPassword: String? by project
 val screepsToken: String? by project
 val screepsHost: String? by project
 val screepsBranch: String? by project
+val screepsLocalDir: String? by project
 val branch = screepsBranch ?: "default"
 val host = screepsHost ?: "https://screeps.com"
 val minifiedJsDirectory: String = File(buildDir, "minified-js").absolutePath
@@ -86,4 +87,36 @@ tasks.register<RestTask>("deploy") {
         logger.lifecycle("uploading ${jsFiles.count()} files to branch '$branch' on server $host")
     }
 
+}
+
+tasks.register<DefaultTask>("deploy-local") {
+    group = "screeps"
+    dependsOn(processDceKotlinJs)
+
+    val localDir = screepsLocalDir?.let{File(it)} ?: throw InvalidUserDataException("you need to specify screepsLocalDir in gradle.properties")
+    val minifiedCodeLocation = File(minifiedJsDirectory)
+
+    doFirst {
+        if (!minifiedCodeLocation.isDirectory) {
+            throw InvalidUserDataException("found no code to upload at ${minifiedCodeLocation.path}")
+        }
+        if(!localDir.isDirectory) {
+            throw InvalidUserDataException("$screepsLocalDir is not a directory")
+        }
+
+        val jsFiles = minifiedCodeLocation.listFiles { _, name -> name.endsWith(".js") }.orEmpty()
+
+        jsFiles.firstOrNull { it.nameWithoutExtension == project.name }
+                ?: throw IllegalStateException("Could not find js file corresponding to main module in ${minifiedCodeLocation.absolutePath}. Was looking for ${project.name}.js")
+
+        copy {
+            from(jsFiles)
+            into(localDir)
+            rename {
+                if(it == "${project.name}.js") {
+                    "main.js"
+                } else it
+            }
+        }
+    }
 }
